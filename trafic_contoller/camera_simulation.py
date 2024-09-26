@@ -10,7 +10,7 @@ LANES = 3
 NUM_VEHICLES = 10  # Number of vehicles to simulate
 
 def generate_license_number():
-    return f"ABC-{random.randint(1000, 9999)}"
+    return f"ABC-{random.randint(11, 20)}"
 
 def simulate_vehicle_passing(vehicle_count):
     license_number = generate_license_number()
@@ -26,7 +26,7 @@ def simulate_vehicle_passing(vehicle_count):
     try:
         response = requests.post(ENTRY_CAM_URL, json=entry_data)
         response.raise_for_status()  # Raise an error for bad responses
-        print(f"Vehicle {license_number} passed entry camera at {entry_timestamp}")
+        print(f"%Vehicle {license_number} in Entry lane {entry_lane} passed entry camera at {entry_timestamp}")
     except requests.exceptions.RequestException as e:
         print(f"Error sending entry data: {e}")
 
@@ -45,7 +45,7 @@ def simulate_vehicle_passing(vehicle_count):
     try:
         response = requests.post(EXIT_CAM_URL, json=exit_data)
         response.raise_for_status()  # Raise an error for bad responses
-        print(f"Vehicle {license_number} passed exit camera at {exit_timestamp}")
+        print(f"*Vehicle {license_number} in Exitline {exit_lane} passed exit camera at {exit_timestamp}")
     except requests.exceptions.RequestException as e:
         print(f"Error sending exit data: {e}")
 

@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import motor.motor_asyncio
+import httpx
 
 app = FastAPI()
 client = motor.motor_asyncio.AsyncIOMotorClient("mongodb://localhost:27017")
@@ -12,27 +13,53 @@ class SpeedingViolation(BaseModel):
     speed: float
     timestamp: str
 
+# Function to calculate fine based on speed
+def calculate_fine(speed):
+    base_fine = 100  # Base fine amount
+    if speed > 60:
+        return base_fine + (speed - 60) * 10  # $10 fine for each km/h above the limit
+    return base_fine
+
+# Function to get vehicle owner information from the registration service
+async def get_owner_info(license_number):
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"http://localhost:6002/vehicle/{license_number}")
+            response.raise_for_status()
+            return response.json()
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=500, detail=f"Error contacting Vehicle Registration Service: {exc}")
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=response.status_code, detail=f"Vehicle not found: {exc}")
+
+# Endpoint to collect fine for a speeding violation
 @app.post("/collectfine")
 async def collect_fine(violation: SpeedingViolation):
     fine_amount = calculate_fine(violation.speed)
-    
-    # Store fine information
-    await db.fines.insert_one({
+
+    # Store fine information initially without owner details
+    fine_data = {
         "license_number": violation.license_number,
         "speed": violation.speed,
         "fine_amount": fine_amount,
         "timestamp": violation.timestamp
-    })
+    }
     
-    # Call vehicle registration service for owner information (assuming the service exists)
-    # Placeholder for vehicle registration service URL
-    # response = await requests.get(f"http://localhost:6002/vehicleinfo/{violation.license_number}")
-    
-    return {"message": "Fine collected", "fine_amount": fine_amount}
+    result = await db.fines.insert_one(fine_data)
 
-def calculate_fine(speed):
-    over_speed = speed - 60  # Assuming speed limit is 60 km/h
-    return over_speed * 10  # Fine of 10 currency units per km/h over the limit
+    # Get vehicle owner information from the registration service
+    owner_info = await get_owner_info(violation.license_number)
+
+    # Update the fine record with owner information
+    await db.fines.update_one(
+        {"_id": result.inserted_id},
+        {"$set": {
+            "owner_name": owner_info.get("owner_name"),
+            "email": owner_info.get("email")
+        }}
+    )
+
+    return {"message": "Fine recorded successfully", "fine_id": str(result.inserted_id)}
 
 if __name__ == "__main__":
     import uvicorn

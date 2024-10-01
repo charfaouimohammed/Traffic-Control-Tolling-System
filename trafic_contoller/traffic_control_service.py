@@ -51,7 +51,7 @@ async def exit_cam(vehicle_exit: VehicleExit):
         entry_time = datetime.fromisoformat(vehicle_state["entry_timestamp"])
         exit_time = datetime.fromisoformat(vehicle_exit.timestamp)
         speed = calculate_speed(entry_time, exit_time)
-
+        print("vvvvvvvvvvvvvvvvvvvvvvvbbbbbbbbbbbbbbbbbbbbb", speed)
         if speed > 60:  # Assuming speed limit is 60 km/h
             await notify_fine_collection(vehicle_exit.license_number, speed, vehicle_exit.timestamp)
 
@@ -65,13 +65,24 @@ async def exit_cam(vehicle_exit: VehicleExit):
         logger.error(f"Error processing vehicle exit: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
-def calculate_speed(entry_time, exit_time):
-    time_diff = (exit_time - entry_time).total_seconds() / 3600  # in hours
-    distance = 1  # assuming 1 km between entry and exit
+def calculate_speed(entry_time, exit_time) -> float:
+    time_diff = (exit_time - entry_time).total_seconds()  # Time difference in seconds
+    distance_meters = 10000  # Fixed distance in meters (change as necessary)
+    
     if time_diff > 0:
-        return distance / time_diff
+        speed_kmh = (distance_meters / time_diff) * 3600  # Convert to km/h
+        return speed_kmh
     else:
-        return 0  # Prevent division by zero
+        return 0.0
+# def calculate_speed(entry_time, exit_time):
+#     time_diff = exit_time - entry_time  # Time difference
+#     distance_km = 10  # Assuming the distance between entry and exit is 10 km
+    
+#     if time_diff > 0:
+#         speed = (distance_km / time_diff)* 3.6  # Speed in km/h
+#         return speed
+#     else:
+#         return 0  # Prevent division by zero if timestamps are incorrect
 
 async def notify_fine_collection(license_number, speed, timestamp):
     payload = {
@@ -83,7 +94,7 @@ async def notify_fine_collection(license_number, speed, timestamp):
         async with httpx.AsyncClient() as client:
             response = await client.post("http://localhost:6001/collectfine", json=payload)
             response.raise_for_status()  # Raise an error for bad responses
-            logger.info(f"Fine collection notified for {license_number} with speed {speed} km/h")
+            logger.info(f"Fine collection notified for {license_number} with speed {speed} km/h ,response {response}")
     except httpx.RequestError as e:
         logger.error(f"Error notifying fine collection service: {e}")
     except Exception as e:

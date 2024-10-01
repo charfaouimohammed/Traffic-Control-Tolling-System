@@ -9,15 +9,17 @@ db = client["traffic_control"]
 class VehicleInfo(BaseModel):
     license_number: str
     owner_name: str
+    email:str
 
 @app.get("/vehicleinfo/{license_number}")
 async def get_vehicle_info(license_number: str):
-    vehicle_info = await db.vehicle_info.find_one({"license_number": license_number})
-    
-    if not vehicle_info:
+    print("info===>>>>",license_number)
+    vehicleinfo = await db.vehicleinfo.find_one({"license_number": license_number})
+    print("info===>>??",vehicleinfo)
+    if not vehicleinfo:
         return {"message": "Vehicle not found"}
-    
-    return {"license_number": vehicle_info["license_number"], "owner_name": vehicle_info["owner_name"]}
+    # return license_number
+    return {"license_number": vehicleinfo["license_number"], "owner_name": vehicleinfo["owner_name"],"email":vehicleinfo["email"]}
 
 if __name__ == "__main__":
     import uvicorn

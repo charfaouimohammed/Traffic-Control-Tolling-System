@@ -15,7 +15,7 @@ def generate_license_number():
 def simulate_vehicle_passing(vehicle_count):
     license_number = generate_license_number()
     entry_lane = random.randint(1, LANES)
-    entry_timestamp = datetime.utcnow().isoformat()
+    entry_timestamp = datetime.now().isoformat()
 
     # Send entry information
     entry_data = {

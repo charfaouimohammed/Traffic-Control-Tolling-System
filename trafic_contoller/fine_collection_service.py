@@ -1,27 +1,16 @@
+# collect_fine_service.py
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import motor.motor_asyncio
 import httpx
-import aiosmtplib
 import smtplib
-
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-
-
-from email.message import EmailMessage
-
-
+from config import config
 
 app = FastAPI()
-client = motor.motor_asyncio.AsyncIOMotorClient("mongodb://localhost:27017")
-db = client["traffic_control"]
-
-# Mailtrap SMTP settings
-MAILTRAP_USERNAME = "48b1326a30f68b"
-MAILTRAP_PASSWORD = "7343588c5713cf"
-MAILTRAP_HOST = "sandbox.smtp.mailtrap.io"
-MAILTRAP_PORT = 2525
+client = motor.motor_asyncio.AsyncIOMotorClient(config.database.uri)
+db = client[config.database.name]
 
 # Models
 class SpeedingViolation(BaseModel):
@@ -31,21 +20,20 @@ class SpeedingViolation(BaseModel):
 
 # Function to get vehicle owner information from the registration service
 async def get_owner_info(license_number):
-    response:str
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"http://localhost:6002/vehicleinfo/{license_number}")
+        async with httpx.AsyncClient() as client_httpx:
+            response = await client_httpx.get(f"{config.services.vehicle_info_service}/{license_number}")
             response.raise_for_status()
             return response.json()
     except httpx.RequestError as exc:
         raise HTTPException(status_code=500, detail=f"Error contacting Vehicle Registration Service: {exc}")
     except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=response.status_code, detail=f"Vehicle not found: {exc}")
+        raise HTTPException(status_code=exc.response.status_code, detail=f"Vehicle not found: {exc}")
 
 # Function to send an email
-async def send_email(email_content,receve_mail):
-    sender = "from@example.com"
-    receiver = receve_mail
+async def send_email(email_content, receiver_email):
+    sender = config.mail.sender
+    receiver = receiver_email
     subject = "Speeding Violation Fine"
     content = email_content
 
@@ -60,20 +48,20 @@ async def send_email(email_content,receve_mail):
 
     # Connect to the SMTP server
     try:
-        with smtplib.SMTP("sandbox.smtp.mailtrap.io", 25) as server:
+        with smtplib.SMTP(config.mail.smtp.host, config.mail.smtp.port) as server:
             server.starttls()  # Upgrade the connection to secure
-            server.login("48b1326a30f68b", "7343588c5713cf")
+            server.login(config.mail.smtp.username, config.mail.smtp.password)
             server.sendmail(sender, receiver, msg.as_string())  # Send the email
         print("Email sent successfully")
     except Exception as e:
         print(f"Failed to send email: {e}")
-    
-    
-    
-    
-    
-    
 
+# Function to calculate fine based on speed
+def calculate_fine(speed):
+    base_fine = 100  # Base fine amount
+    if speed > 60:
+        return base_fine + (speed - 60) * 10  # $10 fine for each km/h above the limit
+    return base_fine
 
 # Endpoint to collect fine for a speeding violation
 @app.post("/collectfine")
@@ -102,7 +90,7 @@ async def collect_fine(violation: SpeedingViolation):
             }}
         )
 
-        # Send an email to the vehicle owner
+        # Prepare email content
         email_content = f"""
         <html>
         <head>
@@ -148,7 +136,7 @@ async def collect_fine(violation: SpeedingViolation):
                     <p>Notification of Speeding Violation</p>
                 </div>
                 <p>Dear {owner_info.get('owner_name')},</p>
-                <p>You have been fined <strong>{int(fine_amount)}</strong> for speeding at <strong>{int(violation.speed)} km/h</strong> on <strong>{violation.timestamp}</strong>.</p>
+                <p>You have been fined <strong>${int(fine_amount)}</strong> for speeding at <strong>{int(violation.speed)} km/h</strong> on <strong>{violation.timestamp}</strong>.</p>
                 <p>We encourage you to adhere to speed limits to ensure safety on the roads.</p>
                 <p>Best regards,<br>
                 Traffic Control System</p>
@@ -161,21 +149,13 @@ async def collect_fine(violation: SpeedingViolation):
         </html>
         """
 
-        
-        #await send_email(owner_info.get("email"), "Speeding Violation Fine", email_content)
-        await send_email(email_content,owner_info.get("email"))
+        # Send an email to the vehicle owner
+        await send_email(email_content, owner_info.get("email"))
 
         return {"message": "Fine recorded and email sent successfully", "fine_id": str(result.inserted_id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error recording fine or sending email: {e}")
 
-# Function to calculate fine based on speed
-def calculate_fine(speed):
-    base_fine = 100  # Base fine amount
-    if speed > 60:
-        return base_fine + (speed - 60) * 10  # $10 fine for each km/h above the limit
-    return base_fine
-
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=6001)
+    uvicorn.run(app, host="0.0.0.0", port=config.fastapi_ports.collect_fine_service)

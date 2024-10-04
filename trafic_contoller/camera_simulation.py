@@ -2,19 +2,14 @@ import random
 import time
 import requests
 from datetime import datetime
-
-# Configurations
-ENTRY_CAM_URL = "http://localhost:6000/entrycam"
-EXIT_CAM_URL = "http://localhost:6000/exitcam"
-LANES = 3
-NUM_VEHICLES = 15  # Number of vehicles to simulate
+from config import config
 
 def generate_license_number():
     return f"ABC-{random.randint(1110, 1120)}"
 
 def simulate_vehicle_passing(vehicle_count):
     license_number = generate_license_number()
-    entry_lane = random.randint(1, LANES)
+    entry_lane = random.randint(1, config.app.lanes)
     entry_timestamp = datetime.now().isoformat()
 
     # Send entry information
@@ -24,17 +19,20 @@ def simulate_vehicle_passing(vehicle_count):
         "timestamp": entry_timestamp
     }
     try:
-        response = requests.post(ENTRY_CAM_URL, json=entry_data)
+        response = requests.post(config.services.entry_cam_url, json=entry_data)
         response.raise_for_status()  # Raise an error for bad responses
         print(f"Vehicle {license_number} passed entry camera at {entry_timestamp}")
     except requests.exceptions.RequestException as e:
         print(f"Error sending entry data: {e}")
 
     # Simulate random delay before exiting
-    time.sleep(random.randint(1, 5))  # Vehicle stays for 1 to 5 seconds
+    time.sleep(random.randint(
+        config.app.simulation_delay_range.min_seconds,
+        config.app.simulation_delay_range.max_seconds
+    ))  # Vehicle stays for min to max seconds
 
-    exit_lane = random.randint(1, LANES)
-    exit_timestamp = datetime.utcnow().isoformat()
+    exit_lane = random.randint(1, config.app.lanes)
+    exit_timestamp = datetime.now().isoformat()
 
     # Send exit information
     exit_data = {
@@ -43,7 +41,7 @@ def simulate_vehicle_passing(vehicle_count):
         "timestamp": exit_timestamp
     }
     try:
-        response = requests.post(EXIT_CAM_URL, json=exit_data)
+        response = requests.post(config.services.exit_cam_url, json=exit_data)
         response.raise_for_status()  # Raise an error for bad responses
         print(f"Vehicle {license_number} passed exit camera at {exit_timestamp}")
     except requests.exceptions.RequestException as e:
@@ -51,9 +49,11 @@ def simulate_vehicle_passing(vehicle_count):
 
 if __name__ == "__main__":
     try:
-        for _ in range(NUM_VEHICLES):
-            simulate_vehicle_passing(_)
-            time.sleep(random.randint(1, 5))  # Simulate a vehicle every 1 to 3 seconds
+        for vehicle_count in range(config.app.num_vehicles):
+            simulate_vehicle_passing(vehicle_count)
+            time.sleep(random.randint(
+                config.app.simulation_delay_range.min_seconds,
+                config.app.simulation_delay_range.max_seconds
+            ))  # Simulate a vehicle every min to max seconds
     except KeyboardInterrupt:
         print("\nSimulation stopped by user.")
-
